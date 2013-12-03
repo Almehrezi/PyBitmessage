@@ -743,7 +743,6 @@ class MyForm(QtGui.QMainWindow):
 
     # Load Sent items from database
     def loadSent(self, where="", what=""):
-        what = "%" + what + "%"
         if where == "To":
             where = "toaddress"
         elif where == "From":
@@ -764,6 +763,28 @@ class MyForm(QtGui.QMainWindow):
         while self.ui.tableWidgetSent.rowCount() > 0:
             self.ui.tableWidgetSent.removeRow(0)
 
+        tmpAddress = ''
+        tmpLabel = what
+        for item in shared.config.sections():
+            if shared.config.has_option(item, 'label'):
+                if tmpLabel == shared.config.get(item, 'label'):
+                    tmpAddress = item
+        if tmpAddress == '':  # If the tmpAddress isn't one of our addresses and isn't a chan
+            queryreturn = sqlQuery(
+                    '''select address from addressbook where label=?''', tmpLabel)
+            if queryreturn != []:
+                for row in queryreturn:
+                    tmpAddress, = row
+        if tmpAddress == '':  # If this address wasn't in our address book...
+            queryreturn = sqlQuery(
+                '''select address from subscriptions where label=?''', tmpLabel)
+            if queryreturn != []:
+                for row in queryreturn:
+                    tmpAddress, = row
+        if tmpAddress != '':
+            what = tmpAddress
+            
+        what = "%" + what + "%"
         queryreturn = sqlQuery(sqlStatement, what)
         for row in queryreturn:
             toAddress, fromAddress, subject, status, ackdata, lastactiontime = row
@@ -872,7 +893,6 @@ class MyForm(QtGui.QMainWindow):
 
     # Load inbox from messages database file
     def loadInbox(self, where="", what=""):
-        what = "%" + what + "%"
         if where == "To":
             where = "toaddress"
         elif where == "From":
@@ -895,88 +915,115 @@ class MyForm(QtGui.QMainWindow):
 
         font = QFont()
         font.setBold(True)
+
+        tmpAddress = ''
+        tmpLabel = what
+        for item in shared.config.sections():
+            if shared.config.has_option(item, 'label'):
+                if tmpLabel == shared.config.get(item, 'label'):
+                    tmpAddress = item
+        if tmpAddress == '':  # If the tmpAddress isn't one of our addresses and isn't a chan
+            queryreturn = sqlQuery(
+                    '''select address from addressbook where label=?''', tmpLabel)
+            if queryreturn != []:
+                for row in queryreturn:
+                    tmpAddress, = row
+        if tmpAddress == '':  # If this address wasn't in our address book...
+            queryreturn = sqlQuery(
+                '''select address from subscriptions where label=?''', tmpLabel)
+            if queryreturn != []:
+                for row in queryreturn:
+                    tmpAddress, = row
+        if tmpAddress != '':
+            what = tmpAddress
+            
+        what = "%" + what + "%"        
         queryreturn = sqlQuery(sqlStatement, what)
-        for row in queryreturn:
-            msgid, toAddress, fromAddress, subject, received, read = row
-            subject = shared.fixPotentiallyInvalidUTF8Data(subject)
-            try:
-                if toAddress == self.str_broadcast_subscribers:
-                    toLabel = self.str_broadcast_subscribers
-                else:
-                    toLabel = shared.config.get(toAddress, 'label')
-            except:
-                toLabel = ''
-            if toLabel == '':
-                toLabel = toAddress
+        if queryreturn != []:
+			for row in queryreturn:
+				msgid, toAddress, fromAddress, subject, received, read = row
+				subject = shared.fixPotentiallyInvalidUTF8Data(subject)
+				try:
+					if toAddress == self.str_broadcast_subscribers:
+						toLabel = self.str_broadcast_subscribers
+					else:
+						toLabel = shared.config.get(toAddress, 'label')
+				except:
+					toLabel = ''
+				if toLabel == '':
+					toLabel = toAddress
 
-            fromLabel = ''
-            if shared.config.has_section(fromAddress):
-                fromLabel = shared.config.get(fromAddress, 'label')
-            
-            if fromLabel == '':  # If the fromAddress isn't one of our addresses and isn't a chan
-                queryreturn = sqlQuery(
-                    '''select label from addressbook where address=?''', fromAddress)
-                if queryreturn != []:
-                    for row in queryreturn:
-                        fromLabel, = row
+				fromLabel = ''
+				if shared.config.has_section(fromAddress):
+					fromLabel = shared.config.get(fromAddress, 'label')
+				
+				if fromLabel == '':  # If the fromAddress isn't one of our addresses and isn't a chan
+					queryreturn = sqlQuery(
+						'''select label from addressbook where address=?''', fromAddress)
+					if queryreturn != []:
+						for row in queryreturn:
+							fromLabel, = row
 
-            if fromLabel == '':  # If this address wasn't in our address book...
-                queryreturn = sqlQuery(
-                    '''select label from subscriptions where address=?''', fromAddress)
-                if queryreturn != []:
-                    for row in queryreturn:
-                        fromLabel, = row
-            if fromLabel == '':
-                fromLabel = fromAddress
-            
-            # message row
-            self.ui.tableWidgetInbox.insertRow(0)
-            # to
-            to_item = QtGui.QTableWidgetItem(unicode(toLabel, 'utf-8'))
-            to_item.setToolTip(unicode(toLabel, 'utf-8'))
-            to_item.setFlags(
-                QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
-            if not read:
-                to_item.setFont(font)
-            to_item.setData(Qt.UserRole, str(toAddress))
-            if shared.safeConfigGetBoolean(toAddress, 'mailinglist'):
-                to_item.setTextColor(QtGui.QColor(137, 04, 177)) # magenta
-            if shared.safeConfigGetBoolean(str(toAddress), 'chan'):
-                to_item.setTextColor(QtGui.QColor(216, 119, 0)) # orange
-            to_item.setIcon(avatarize(toAddress))
-            self.ui.tableWidgetInbox.setItem(0, 0, to_item)
-            # from
-            from_item = QtGui.QTableWidgetItem(unicode(fromLabel, 'utf-8'))
-            from_item.setToolTip(unicode(fromLabel, 'utf-8'))
-            from_item.setFlags(
-                QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
-            if not read:
-                from_item.setFont(font)
-            from_item.setData(Qt.UserRole, str(fromAddress))
-            if shared.safeConfigGetBoolean(str(fromAddress), 'chan'):
-                from_item.setTextColor(QtGui.QColor(216, 119, 0)) # orange
-            from_item.setIcon(avatarize(fromAddress))
-            self.ui.tableWidgetInbox.setItem(0, 1, from_item)
-            # subject
-            subject_item = QtGui.QTableWidgetItem(unicode(subject, 'utf-8'))
-            subject_item.setToolTip(unicode(subject, 'utf-8'))
-            subject_item.setFlags(
-                QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
-            if not read:
-                subject_item.setFont(font)
-            self.ui.tableWidgetInbox.setItem(0, 2, subject_item)
-            # time received
-            time_item = myTableWidgetItem(unicode(strftime(shared.config.get(
-                'bitmessagesettings', 'timeformat'), localtime(int(received))), 'utf-8'))
-            time_item.setToolTip(unicode(strftime(shared.config.get(
-                'bitmessagesettings', 'timeformat'), localtime(int(received))), 'utf-8'))
-            time_item.setData(Qt.UserRole, QByteArray(msgid))
-            time_item.setData(33, int(received))
-            time_item.setFlags(
-                QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
-            if not read:
-                time_item.setFont(font)
-            self.ui.tableWidgetInbox.setItem(0, 3, time_item)
+				if fromLabel == '':  # If this address wasn't in our address book...
+					queryreturn = sqlQuery(
+						'''select label from subscriptions where address=?''', fromAddress)
+					if queryreturn != []:
+						for row in queryreturn:
+							fromLabel, = row
+				if fromLabel == '':
+					fromLabel = fromAddress
+				
+				# message row
+				self.ui.tableWidgetInbox.insertRow(0)
+				# to
+				to_item = QtGui.QTableWidgetItem(unicode(toLabel, 'utf-8'))
+				to_item.setToolTip(unicode(toLabel, 'utf-8'))
+				to_item.setFlags(
+					QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+				if not read:
+					to_item.setFont(font)
+				to_item.setData(Qt.UserRole, str(toAddress))
+				if shared.safeConfigGetBoolean(toAddress, 'mailinglist'):
+					to_item.setTextColor(QtGui.QColor(137, 04, 177)) # magenta
+				if shared.safeConfigGetBoolean(str(toAddress), 'chan'):
+					to_item.setTextColor(QtGui.QColor(216, 119, 0)) # orange
+				to_item.setIcon(avatarize(toAddress))
+				self.ui.tableWidgetInbox.setItem(0, 0, to_item)
+				# from
+				from_item = QtGui.QTableWidgetItem(unicode(fromLabel, 'utf-8'))
+				from_item.setToolTip(unicode(fromLabel, 'utf-8'))
+				from_item.setFlags(
+					QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+				if not read:
+					from_item.setFont(font)
+				from_item.setData(Qt.UserRole, str(fromAddress))
+				if shared.safeConfigGetBoolean(str(fromAddress), 'chan'):
+					from_item.setTextColor(QtGui.QColor(216, 119, 0)) # orange
+				from_item.setIcon(avatarize(fromAddress))
+				self.ui.tableWidgetInbox.setItem(0, 1, from_item)
+				# subject
+				subject_item = QtGui.QTableWidgetItem(unicode(subject, 'utf-8'))
+				subject_item.setToolTip(unicode(subject, 'utf-8'))
+				subject_item.setFlags(
+					QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+				if not read:
+					subject_item.setFont(font)
+				self.ui.tableWidgetInbox.setItem(0, 2, subject_item)
+				# time received
+				time_item = myTableWidgetItem(unicode(strftime(shared.config.get(
+					'bitmessagesettings', 'timeformat'), localtime(int(received))), 'utf-8'))
+				time_item.setToolTip(unicode(strftime(shared.config.get(
+					'bitmessagesettings', 'timeformat'), localtime(int(received))), 'utf-8'))
+				time_item.setData(Qt.UserRole, QByteArray(msgid))
+				time_item.setData(33, int(received))
+				time_item.setFlags(
+					QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+				if not read:
+					time_item.setFont(font)
+				self.ui.tableWidgetInbox.setItem(0, 3, time_item)
+        else:
+            self.statusBar().showMessage(_translate(
+                    "MainWindow", "Error: No match found."))
 
         self.ui.tableWidgetInbox.sortItems(3, Qt.DescendingOrder)
         self.ui.tableWidgetInbox.keyPressEvent = self.tableWidgetInboxKeyPressEvent
